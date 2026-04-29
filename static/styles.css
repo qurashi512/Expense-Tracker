@@ -1,0 +1,101 @@
+/* ===== General ===== */
+body {
+    background-color: #f8f9fa;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+h1 {
+    color: #333;
+    font-weight: 700;
+}
+
+/* ===== Navbar ===== */
+.navbar {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.navbar-brand {
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+/* ===== Cards ===== */
+.card {
+    border: none;
+    border-radius: 12px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+/* ===== Buttons ===== */
+.btn {
+    border-radius: 8px;
+    font-weight: 500;
+}
+
+.btn-primary {
+    background-color: #4361ee;
+    border-color: #4361ee;
+}
+
+.btn-primary:hover {
+    background-color: #3a56d4;
+    border-color: #3a56d4;
+}
+
+/* ===== Tables ===== */
+.table thead th {
+    border-top: none;
+    font-weight: 600;
+}
+
+.table-hover tbody tr:hover {
+    background-color: #f0f4ff;
+}
+
+/* ===== Forms ===== */
+.form-control {
+    border-radius: 8px;
+    border: 1px solid #ced4da;
+    padding: 10px 14px;
+}
+
+.form-control:focus {
+    border-color: #4361ee;
+    box-shadow: 0 0 0 0.2rem rgba(67, 97, 238, 0.2);
+}
+
+/* ===== Footer ===== */
+footer {
+    background-color: #333;
+    color: #aaa;
+    font-size: 0.9rem;
+    margin-top: 60px;
+}
+
+/* ===== Alerts ===== */
+.alert {
+    border-radius: 10px;
+    font-weight: 500;
+}
+
+/* ===== Dashboard Numbers ===== */
+.card h2 {
+    font-size: 2rem;
+    font-weight: 700;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+    .card h2 {
+        font-size: 1.5rem;
+    }
+
+    h1 {
+        font-size: 1.5rem;
+    }
+}

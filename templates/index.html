@@ -1,0 +1,138 @@
+{% extends "layout.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+
+<h1 class="mb-4">🏠 Dashboard</h1>
+
+<!-- تحذير الميزانية -->
+{% if warning %}
+<div class="alert alert-warning">
+    ⚠️ You've used 90% or more of your monthly budget!
+</div>
+{% endif %}
+
+<!-- بطاقات الملخص -->
+<div class="row text-center mb-4">
+
+    <div class="col-md-4">
+        <div class="card shadow p-3 mb-3">
+            <h5>💸 Spent This Month</h5>
+            <h2 class="text-danger">${{ "%.2f"|format(total) }}</h2>
+        </div>
+    </div>
+
+    {% if budget %}
+    <div class="col-md-4">
+        <div class="card shadow p-3 mb-3">
+            <h5>💰 Income</h5>
+            <h2 class="text-success">${{ "%.2f"|format(budget.income) }}</h2>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card shadow p-3 mb-3">
+            <h5>🏦 Remaining</h5>
+            <h2 class="text-primary">${{ "%.2f"|format(remaining) }}</h2>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-md-8">
+        <div class="card shadow p-3 mb-3 bg-light">
+            <p class="mt-2">
+                No budget set yet.
+                <a href="/budget">Set your budget →</a>
+            </p>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- Chart + آخر المصروفات -->
+<div class="row">
+
+    <!-- الرسم البياني -->
+    <div class="col-md-5">
+        <div class="card shadow p-3 mb-4">
+            <h5 class="mb-3">📊 This Month by Category</h5>
+            {% if categories %}
+            <canvas id="expenseChart"></canvas>
+            {% else %}
+            <p class="text-muted text-center mt-3">No expenses this month yet.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- آخر 5 مصروفات -->
+    <div class="col-md-7">
+        <div class="card shadow p-3 mb-4">
+            <h5 class="mb-3">🕐 Recent Expenses</h5>
+            {% if recent %}
+            <table class="table table-hover">
+                <thead class="thead-light">
+                    <tr>
+                        <th>Date</th>
+                        <th>Category</th>
+                        <th>Amount</th>
+                        <th>Note</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for e in recent %}
+                    <tr>
+                        <td>{{ e.date }}</td>
+                        <td>{{ e.category }}</td>
+                        <td class="text-danger">${{ "%.2f"|format(e.amount) }}</td>
+                        <td>{{ e.note or "—" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <a href="/history" class="btn btn-outline-secondary btn-sm">
+                View All →
+            </a>
+            {% else %}
+            <p class="text-muted">No expenses yet. <a href="/add">Add one!</a></p>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+<!-- زر إضافة مصروف -->
+<div class="text-center mt-2">
+    <a href="/add" class="btn btn-primary btn-lg">➕ Add New Expense</a>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{% if categories %}
+<script>
+    const labels = {{ categories | map(attribute='category') | list | tojson }};
+    const data   = {{ categories | map(attribute='total')    | list | tojson }};
+
+    new Chart(document.getElementById('expenseChart'), {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: [
+                    '#FF6384', '#36A2EB', '#FFCE56',
+                    '#4BC0C0', '#9966FF', '#FF9F40'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+</script>
+{% endif %}
+{% endblock %}
