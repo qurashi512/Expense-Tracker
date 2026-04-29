@@ -1,5 +1,5 @@
- 💰 Expense Tracker
-#### Video Demo: https://youtu.be/LW-WPw9KLeA?si=U40S4EGyvGUStKTf
+# Expense Tracker
+#### Video Demo:  <https://youtu.be/LW-WPw9KLeA?si=U40S4EGyvGUStKTf>
 #### Description:
 ## What is Expense Tracker?
 Expense Tracker is a web-based application built with Python, Flask, SQL, HTML, CSS, and JavaScript. The app allows
