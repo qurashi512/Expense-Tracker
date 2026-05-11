@@ -4,6 +4,8 @@ from cs50 import SQL
 from werkzeug.security import check_password_hash, generate_password_hash
 from functools import wraps
 import os
+from dotenv import load_dotenv
+load_dotenv()
 
 # ==================== إعداد التطبيق ====================
 
