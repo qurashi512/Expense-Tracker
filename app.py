@@ -9,63 +9,23 @@ import os
 
 app = Flask(__name__)
 
-# Secret key من environment variable
 app.secret_key = os.environ.get("SECRET_KEY", "dev-fallback-key-change-this")
 
-# إعداد الـ Session
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
 Session(app)
 
 # ==================== قاعدة البيانات ====================
-# محلياً: SQLite — على Render: PostgreSQL تلقائياً
+# Supabase بيبعت "postgres://" — cs50 محتاج "postgresql://"
 
 database_url = os.environ.get("DATABASE_URL", "sqlite:///finance.db")
-
-# Render بيبعت "postgres://" — cs50 محتاج "postgresql://"
 if database_url.startswith("postgres://"):
     database_url = database_url.replace("postgres://", "postgresql://", 1)
 
 db = SQL(database_url)
 
 
-# ==================== إنشاء الجداول تلقائياً عند التشغيل ====================
-
-def init_db():
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            username TEXT NOT NULL UNIQUE,
-            hash TEXT NOT NULL
-        )
-    """)
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS expenses (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER NOT NULL,
-            amount REAL NOT NULL,
-            category TEXT NOT NULL,
-            note TEXT,
-            date TEXT NOT NULL,
-            FOREIGN KEY(user_id) REFERENCES users(id)
-        )
-    """)
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS budgets (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER NOT NULL,
-            month TEXT NOT NULL,
-            income REAL DEFAULT 0,
-            limit_amount REAL DEFAULT 0,
-            FOREIGN KEY(user_id) REFERENCES users(id)
-        )
-    """)
-
-with app.app_context():
-    init_db()
-
-
-# ==================== Login Required Decorator ====================
+# ==================== Login Required ====================
 
 def login_required(f):
     @wraps(f)
@@ -76,7 +36,7 @@ def login_required(f):
     return decorated_function
 
 
-# ==================== صفحة الـ Dashboard (الرئيسية) ====================
+# ==================== Dashboard ====================
 
 @app.route("/")
 @login_required
@@ -87,7 +47,7 @@ def index():
         SELECT COALESCE(SUM(amount), 0) AS total
         FROM expenses
         WHERE user_id = ?
-        AND strftime('%Y-%m', date) = strftime('%Y-%m', 'now')
+        AND TO_CHAR(date::date, 'YYYY-MM') = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
     """, user_id)
     total = total_result[0]["total"]
 
@@ -101,7 +61,7 @@ def index():
     budget_data = db.execute("""
         SELECT * FROM budgets
         WHERE user_id = ?
-        AND month = strftime('%Y-%m', 'now')
+        AND month = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
     """, user_id)
     budget = budget_data[0] if budget_data else None
 
@@ -117,7 +77,7 @@ def index():
         SELECT category, SUM(amount) AS total
         FROM expenses
         WHERE user_id = ?
-        AND strftime('%Y-%m', date) = strftime('%Y-%m', 'now')
+        AND TO_CHAR(date::date, 'YYYY-MM') = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
         GROUP BY category
         ORDER BY total DESC
     """, user_id)
@@ -205,8 +165,7 @@ def edit(id):
     user_id = session["user_id"]
 
     expense = db.execute("""
-        SELECT * FROM expenses
-        WHERE id = ? AND user_id = ?
+        SELECT * FROM expenses WHERE id = ? AND user_id = ?
     """, id, user_id)
 
     if not expense:
@@ -253,8 +212,7 @@ def delete(id):
     user_id = session["user_id"]
 
     expense = db.execute("""
-        SELECT * FROM expenses
-        WHERE id = ? AND user_id = ?
+        SELECT * FROM expenses WHERE id = ? AND user_id = ?
     """, id, user_id)
 
     if not expense:
@@ -262,7 +220,6 @@ def delete(id):
         return redirect("/history")
 
     db.execute("DELETE FROM expenses WHERE id = ? AND user_id = ?", id, user_id)
-
     flash("Expense deleted. 🗑️", "success")
     return redirect("/history")
 
@@ -291,14 +248,12 @@ def budget():
             return render_template("budget.html")
 
         existing = db.execute("""
-            SELECT id FROM budgets
-            WHERE user_id = ? AND month = ?
+            SELECT id FROM budgets WHERE user_id = ? AND month = ?
         """, user_id, month)
 
         if existing:
             db.execute("""
-                UPDATE budgets
-                SET income = ?, limit_amount = ?
+                UPDATE budgets SET income = ?, limit_amount = ?
                 WHERE user_id = ? AND month = ?
             """, income, limit, user_id, month)
         else:
@@ -313,7 +268,7 @@ def budget():
     current_budget = db.execute("""
         SELECT * FROM budgets
         WHERE user_id = ?
-        AND month = strftime('%Y-%m', 'now')
+        AND month = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
     """, user_id)
     current_budget = current_budget[0] if current_budget else None
 
@@ -328,7 +283,7 @@ def reports():
     user_id = session["user_id"]
 
     monthly = db.execute("""
-        SELECT strftime('%Y-%m', date) AS month,
+        SELECT TO_CHAR(date::date, 'YYYY-MM') AS month,
                SUM(amount) AS total
         FROM expenses
         WHERE user_id = ?
@@ -341,15 +296,14 @@ def reports():
         SELECT category, SUM(amount) AS total
         FROM expenses
         WHERE user_id = ?
-        AND strftime('%Y-%m', date) = strftime('%Y-%m', 'now')
+        AND TO_CHAR(date::date, 'YYYY-MM') = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
         GROUP BY category
         ORDER BY total DESC
     """, user_id)
 
     all_time = db.execute("""
         SELECT COALESCE(SUM(amount), 0) AS total
-        FROM expenses
-        WHERE user_id = ?
+        FROM expenses WHERE user_id = ?
     """, user_id)[0]["total"]
 
     return render_template("reports.html",
@@ -433,8 +387,6 @@ def logout():
     session.clear()
     return redirect("/login")
 
-
-# ==================== تشغيل التطبيق ====================
 
 if __name__ == "__main__":
     app.run(debug=False)
