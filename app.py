@@ -3,53 +3,71 @@ from flask_session import Session
 from cs50 import SQL
 from werkzeug.security import check_password_hash, generate_password_hash
 from functools import wraps
+import os
 
 # ==================== إعداد التطبيق ====================
 
 app = Flask(__name__)
+
+# Secret key من environment variable
+app.secret_key = os.environ.get("SECRET_KEY", "dev-fallback-key-change-this")
 
 # إعداد الـ Session
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
 Session(app)
 
-# ربط قاعدة البيانات
-db = SQL("sqlite:///finance.db")
+# ==================== قاعدة البيانات ====================
+# محلياً: SQLite — على Render: PostgreSQL تلقائياً
+
+database_url = os.environ.get("DATABASE_URL", "sqlite:///finance.db")
+
+# Render بيبعت "postgres://" — cs50 محتاج "postgresql://"
+if database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+db = SQL(database_url)
 
 
-# ==================== إنشاء الجداول ====================
-# شغّل ده مرة واحدة عند بداية المشروع
+# ==================== إنشاء الجداول تلقائياً عند التشغيل ====================
 
-# CREATE TABLE users (
-#     id INTEGER PRIMARY KEY AUTOINCREMENT,
-#     username TEXT NOT NULL UNIQUE,
-#     hash TEXT NOT NULL
-# );
+def init_db():
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username TEXT NOT NULL UNIQUE,
+            hash TEXT NOT NULL
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS expenses (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            category TEXT NOT NULL,
+            note TEXT,
+            date TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS budgets (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            month TEXT NOT NULL,
+            income REAL DEFAULT 0,
+            limit_amount REAL DEFAULT 0,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
 
-# CREATE TABLE expenses (
-#     id INTEGER PRIMARY KEY AUTOINCREMENT,
-#     user_id INTEGER NOT NULL,
-#     amount REAL NOT NULL,
-#     category TEXT NOT NULL,
-#     note TEXT,
-#     date TEXT NOT NULL,
-#     FOREIGN KEY(user_id) REFERENCES users(id)
-# );
-
-# CREATE TABLE budgets (
-#     id INTEGER PRIMARY KEY AUTOINCREMENT,
-#     user_id INTEGER NOT NULL,
-#     month TEXT NOT NULL,
-#     income REAL DEFAULT 0,
-#     limit_amount REAL DEFAULT 0,
-#     FOREIGN KEY(user_id) REFERENCES users(id)
-# );
+with app.app_context():
+    init_db()
 
 
 # ==================== Login Required Decorator ====================
 
 def login_required(f):
-    """يتأكد إن المستخدم logged in قبل ما يدخل أي صفحة محمية"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if session.get("user_id") is None:
@@ -65,7 +83,6 @@ def login_required(f):
 def index():
     user_id = session["user_id"]
 
-    # إجمالي مصروفات الشهر الحالي
     total_result = db.execute("""
         SELECT COALESCE(SUM(amount), 0) AS total
         FROM expenses
@@ -74,7 +91,6 @@ def index():
     """, user_id)
     total = total_result[0]["total"]
 
-    # آخر 5 مصروفات
     recent = db.execute("""
         SELECT * FROM expenses
         WHERE user_id = ?
@@ -82,7 +98,6 @@ def index():
         LIMIT 5
     """, user_id)
 
-    # بيانات الميزانية للشهر الحالي
     budget_data = db.execute("""
         SELECT * FROM budgets
         WHERE user_id = ?
@@ -90,17 +105,14 @@ def index():
     """, user_id)
     budget = budget_data[0] if budget_data else None
 
-    # حساب المتبقي
     remaining = None
     if budget and budget["income"] > 0:
         remaining = budget["income"] - total
 
-    # تحذير لو وصل 90% من الحد الأقصى
     warning = False
     if budget and budget["limit_amount"] > 0:
         warning = total >= (budget["limit_amount"] * 0.9)
 
-    # بيانات الـ Chart (مصروفات الشهر مصنّفة)
     categories = db.execute("""
         SELECT category, SUM(amount) AS total
         FROM expenses
@@ -130,7 +142,6 @@ def add():
         note     = request.form.get("note")
         date     = request.form.get("date")
 
-        # التحقق من الإدخال
         if not amount or not category or not date:
             flash("Please fill in all required fields.", "danger")
             return render_template("add.html")
@@ -159,8 +170,6 @@ def add():
 @login_required
 def history():
     user_id = session["user_id"]
-
-    # فلترة اختيارية بالكاتيجوري
     category_filter = request.args.get("category", "")
 
     if category_filter:
@@ -176,7 +185,6 @@ def history():
             ORDER BY date DESC
         """, user_id)
 
-    # قائمة الكاتيجوريز المتاحة للفلتر
     all_categories = db.execute("""
         SELECT DISTINCT category FROM expenses
         WHERE user_id = ?
@@ -196,7 +204,6 @@ def history():
 def edit(id):
     user_id = session["user_id"]
 
-    # التأكد إن المصروف ده بتاع الـ user الحالي فقط
     expense = db.execute("""
         SELECT * FROM expenses
         WHERE id = ? AND user_id = ?
@@ -214,7 +221,6 @@ def edit(id):
         note     = request.form.get("note")
         date     = request.form.get("date")
 
-        # التحقق من الإدخال
         if not amount or not category or not date:
             flash("Please fill in all required fields.", "danger")
             return render_template("edit.html", expense=expense)
@@ -246,7 +252,6 @@ def edit(id):
 def delete(id):
     user_id = session["user_id"]
 
-    # التأكد إن المصروف بتاع الـ user الحالي فقط
     expense = db.execute("""
         SELECT * FROM expenses
         WHERE id = ? AND user_id = ?
@@ -273,6 +278,7 @@ def budget():
         income = request.form.get("income")
         limit  = request.form.get("limit")
         month  = request.form.get("month")
+
         if not income or not month:
             flash("Please fill in income and month.", "danger")
             return render_template("budget.html")
@@ -284,7 +290,6 @@ def budget():
             flash("Please enter valid numbers.", "danger")
             return render_template("budget.html")
 
-        # لو موجود — update، لو لأ — insert
         existing = db.execute("""
             SELECT id FROM budgets
             WHERE user_id = ? AND month = ?
@@ -305,7 +310,6 @@ def budget():
         flash("Budget saved! 💰", "success")
         return redirect("/")
 
-    # جيب الميزانية الحالية لو موجودة
     current_budget = db.execute("""
         SELECT * FROM budgets
         WHERE user_id = ?
@@ -323,7 +327,6 @@ def budget():
 def reports():
     user_id = session["user_id"]
 
-    # مصروفات كل شهر (آخر 6 شهور)
     monthly = db.execute("""
         SELECT strftime('%Y-%m', date) AS month,
                SUM(amount) AS total
@@ -334,7 +337,6 @@ def reports():
         LIMIT 6
     """, user_id)
 
-    # مصروفات كل كاتيجوري (الشهر الحالي)
     by_category = db.execute("""
         SELECT category, SUM(amount) AS total
         FROM expenses
@@ -344,7 +346,6 @@ def reports():
         ORDER BY total DESC
     """, user_id)
 
-    # إجمالي كل الوقت
     all_time = db.execute("""
         SELECT COALESCE(SUM(amount), 0) AS total
         FROM expenses
@@ -391,9 +392,9 @@ def login():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        username        = request.form.get("username")
-        password        = request.form.get("password")
-        confirm         = request.form.get("confirmation")
+        username = request.form.get("username")
+        password = request.form.get("password")
+        confirm  = request.form.get("confirmation")
 
         if not username or not password or not confirm:
             flash("Please fill in all fields.", "danger")
@@ -402,21 +403,19 @@ def register():
         if password != confirm:
             flash("Passwords do not match.", "danger")
             return render_template("register.html")
+
         if len(password) < 6:
             flash("Password must be at least 6 characters.", "danger")
             return render_template("register.html")
 
-        # التأكد إن الـ username مش موجود
         existing = db.execute("SELECT id FROM users WHERE username = ?", username)
         if existing:
             flash("Username already taken.", "danger")
             return render_template("register.html")
 
-        # حفظ الـ password كـ hash
         hashed = generate_password_hash(password)
         db.execute("INSERT INTO users (username, hash) VALUES (?, ?)", username, hashed)
 
-        # تسجيل دخول تلقائي بعد التسجيل
         rows = db.execute("SELECT * FROM users WHERE username = ?", username)
         session["user_id"] = rows[0]["id"]
         session["username"] = username
@@ -438,4 +437,4 @@ def logout():
 # ==================== تشغيل التطبيق ====================
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=False)
